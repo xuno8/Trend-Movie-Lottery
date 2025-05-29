@@ -21,14 +21,19 @@ if uploaded_file is not None:
     # Remove duplicate preferences per user
     def clean_preferences(row):
         seen = []
+        violations = []
         for pref in row[prefs_cols]:
             if pd.isna(pref):
                 continue
             if pref not in seen:
                 seen.append(pref)
-        return seen
+            else:
+                violations.append(pref)
+        return seen, violations
 
-    df["cleaned_prefs"] = df.apply(clean_preferences, axis=1)
+    # Apply the function and create new columns
+    result_df = pd.DataFrame(df.apply(clean_preferences, axis=1).tolist(), index=df.index, columns=['cleaned_prefs', 'violations'])
+    df = pd.concat([df, result_df], axis=1)
 
     # Identify all unique options
     all_options = sorted({opt for prefs in df["cleaned_prefs"] for opt in prefs})
@@ -63,11 +68,13 @@ if uploaded_file is not None:
         display_cols = ["Email", "Name", "PSID", "登記票數 Number of tickets"] + prefs_cols
 
         # Display results in tabs
-        tabs = st.tabs(all_options + ["Losers"])
-        for idx, opt in enumerate(all_options + ["Losers"]):
+        tabs = st.tabs(all_options + ["Losers", "Violations"])
+        for idx, opt in enumerate(all_options + ["Losers", "Violations"]):
             with tabs[idx]:
                 if opt == "Losers":
                     subset = df.loc[losers]
+                elif opt == "Violations":
+                    subset = df[df["violations"].str.len() > 0]
                 else:
                     subset = df.loc[winners[opt]]
                 st.write(subset[display_cols])
@@ -79,6 +86,7 @@ if uploaded_file is not None:
                 safe_name = re.sub(r"[\\/*?:\[\]]", "_", opt)[:31]
                 df.loc[winners[opt], display_cols].to_excel(writer, sheet_name=safe_name, index=False)
             df.loc[losers, display_cols].to_excel(writer, sheet_name="Losers", index=False)
+            df[df["violations"].str.len() > 0][display_cols].to_excel(writer, sheet_name="Violations", index=False)
         processed_data = output.getvalue()
 
         st.download_button(

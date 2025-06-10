@@ -73,10 +73,19 @@ if uploaded_file is not None:
             with tabs[idx]:
                 if opt == "Losers":
                     subset = df.loc[losers]
+                    st.write("### 未中獎人數統計")
+                    st.write(f"總人數: {len(subset)}")
+                    st.write(f"總票數: {subset['登記票數 Number of tickets'].sum()}")
                 elif opt == "Violations":
                     subset = df[df["violations"].str.len() > 0]
+                    st.write("### 違規人數統計")
+                    st.write(f"總人數: {len(subset)}")
+                    st.write(f"總票數: {subset['登記票數 Number of tickets'].sum()}")
                 else:
                     subset = df.loc[winners[opt]]
+                    st.write(f"### {opt} 中獎統計")
+                    st.write(f"中獎人數: {len(subset)}")
+                    st.write(f"中獎總票數: {subset['登記票數 Number of tickets'].sum()}")
                 st.write(subset[display_cols])
 
         # Export to Excel with multiple sheets

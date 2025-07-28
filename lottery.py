@@ -67,10 +67,45 @@ if uploaded_file is not None:
             f"Ticket price for '{opt}' (NT$)", min_value=0, value=300, step=1
         )
 
+    # Blacklist configuration
+    st.sidebar.header("Blacklist Configuration")
+    blacklist_input = st.sidebar.text_area(
+        "Enter email addresses to blacklist (one per line):",
+        height=100,
+        help="Enter email addresses that should be excluded from the lottery, one per line"
+    )
+    
+    # Process blacklist emails
+    blacklist_emails = []
+    if blacklist_input.strip():
+        blacklist_emails = [
+            email.strip().lower() 
+            for email in blacklist_input.strip().split('\n') 
+            if email.strip() and '@' in email.strip()
+        ]
+        # Remove duplicates while preserving order
+        blacklist_emails = list(dict.fromkeys(blacklist_emails))
+        
+        if blacklist_emails:
+            st.sidebar.info(f"📝 Blacklist: {len(blacklist_emails)} emails")
+            with st.sidebar.expander("View blacklisted emails"):
+                for email in blacklist_emails:
+                    st.write(f"• {email}")
+        else:
+            st.sidebar.warning("⚠️ No valid emails found in blacklist")
+
     # Button to run lottery
     if st.sidebar.button("Run Lottery"):
         winners = {opt: [] for opt in all_options}
         available_idx = set(df.index)
+        
+        # Filter out blacklisted users
+        blacklisted_idx = []
+        if blacklist_emails:
+            df_emails_lower = df['Email'].str.lower()
+            blacklisted_mask = df_emails_lower.isin(blacklist_emails)
+            blacklisted_idx = df[blacklisted_mask].index.tolist()
+            available_idx -= set(blacklisted_idx)
 
         # Lottery by preference order
         for pref_level in range(len(prefs_cols)):
@@ -89,6 +124,15 @@ if uploaded_file is not None:
         # Calculate total cost
         total_overall_cost = sum(len(winners[opt]) * ticket_prices[opt] for opt in all_options)
         
+        # Display blacklist statistics
+        if blacklisted_idx:
+            st.write("## 🚫 黑名單統計")
+            blacklisted_count = len(blacklisted_idx)
+            blacklisted_tickets = df.loc[blacklisted_idx, '登記票數 Number of tickets'].sum()
+            st.write(f"**被排除人數: {blacklisted_count}**")
+            st.write(f"**被排除票數: {blacklisted_tickets}**")
+            st.write("---")
+        
         # Display overall cost summary
         st.write("## 💰 總花費統計")
         st.write(f"**整體總花費: NT${total_overall_cost:,}**")
@@ -106,8 +150,11 @@ if uploaded_file is not None:
         display_cols = ["Email", "Name", "PSID", "登記票數 Number of tickets"] + prefs_cols
 
         # Display results in tabs
-        tabs = st.tabs(all_options + ["Losers", "Violations"])
-        for idx, opt in enumerate(all_options + ["Losers", "Violations"]):
+        tab_names = all_options + ["Losers", "Violations"]
+        if blacklisted_idx:
+            tab_names.append("Blacklisted")
+        tabs = st.tabs(tab_names)
+        for idx, opt in enumerate(tab_names):
             with tabs[idx]:
                 if opt == "Losers":
                     subset = df.loc[losers]
@@ -119,6 +166,11 @@ if uploaded_file is not None:
                     st.write("### 違規人數統計")
                     st.write(f"總人數: {len(subset)}")
                     st.write(f"總票數: {subset['登記票數 Number of tickets'].sum()}")
+                elif opt == "Blacklisted":
+                    subset = df.loc[blacklisted_idx]
+                    st.write("### 黑名單統計")
+                    st.write(f"被排除人數: {len(subset)}")
+                    st.write(f"被排除票數: {subset['登記票數 Number of tickets'].sum()}")
                 else:
                     subset = df.loc[winners[opt]]
                     winner_count = len(subset)
@@ -138,6 +190,8 @@ if uploaded_file is not None:
                 df.loc[winners[opt], display_cols].to_excel(writer, sheet_name=safe_name, index=False)
             df.loc[losers, display_cols].to_excel(writer, sheet_name="Losers", index=False)
             df[df["violations"].str.len() > 0][display_cols].to_excel(writer, sheet_name="Violations", index=False)
+            if blacklisted_idx:
+                df.loc[blacklisted_idx, display_cols].to_excel(writer, sheet_name="Blacklisted", index=False)
         processed_data = output.getvalue()
 
         st.download_button(
